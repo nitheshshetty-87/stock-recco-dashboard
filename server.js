@@ -1,33 +1,65 @@
 import express from 'express'
 import cors from 'cors'
-import { readFileSync, writeFileSync } from 'fs'
+import { initializeApp, cert, getApps } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { existsSync } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const dataFile = join(__dirname, 'data', 'holdings.json')
-
 const app = express()
 app.use(cors())
 app.use(express.json())
 
-// ─── Holdings ────────────────────────────────────────────────────────────────
+// ─── Firebase Admin (Firestore) ───────────────────────────────────────────────
 
-app.get('/api/holdings', (req, res) => {
+function initFirebase() {
+  if (getApps().length > 0) return getFirestore()
+
+  // In production (Railway): use GOOGLE_APPLICATION_CREDENTIALS env var
+  // In development: use local service account file if present
+  const serviceAccountPath = join(__dirname, 'firebase-service-account.json')
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // Railway: pass JSON as env var
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    initializeApp({ credential: cert(serviceAccount) })
+  } else if (existsSync(serviceAccountPath)) {
+    const require = createRequire(import.meta.url)
+    const serviceAccount = require('./firebase-service-account.json')
+    initializeApp({ credential: cert(serviceAccount) })
+  } else {
+    // Fallback: use application default credentials
+    initializeApp()
+  }
+
+  return getFirestore()
+}
+
+const db = initFirebase()
+
+// ─── Holdings ─────────────────────────────────────────────────────────────────
+
+app.get('/api/holdings', async (req, res) => {
   try {
-    const data = readFileSync(dataFile, 'utf-8')
-    res.json(JSON.parse(data))
-  } catch {
-    res.status(500).json({ error: 'Could not read holdings data' })
+    const doc = await db.collection('portfolio').doc('holdings').get()
+    if (!doc.exists) return res.json([])
+    res.json(doc.data().items || [])
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
 })
 
-app.post('/api/holdings', (req, res) => {
+app.post('/api/holdings', async (req, res) => {
   try {
-    writeFileSync(dataFile, JSON.stringify(req.body, null, 2))
+    await db.collection('portfolio').doc('holdings').set({
+      items: req.body,
+      updatedAt: new Date().toISOString(),
+    })
     res.json({ ok: true })
-  } catch {
-    res.status(500).json({ error: 'Could not write holdings data' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
 })
 
@@ -40,7 +72,6 @@ function parseCSV(text) {
   const lines = text.trim().split('\n')
   const headers = lines[0].split(',')
   return lines.slice(1).map(line => {
-    // handle quoted fields
     const cols = []
     let cur = '', inQ = false
     for (const ch of line) {
@@ -79,7 +110,6 @@ async function loadInstruments() {
   console.log(`Loaded ${instrumentsCache.length} instruments (NSE: ${nse.length}, BSE: ${bse.length})`)
 }
 
-// Search & paginate instruments
 app.get('/api/instruments', async (req, res) => {
   try {
     await loadInstruments()
@@ -97,40 +127,30 @@ app.get('/api/instruments', async (req, res) => {
 
     const total = results.length
     const paginated = results.slice(pageNum * limitNum, (pageNum + 1) * limitNum)
-
     res.json({ total, page: pageNum, limit: limitNum, results: paginated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
-// Live quotes for a list of instruments (exchange:symbol, comma-separated)
-app.get('/api/quotes', async (req, res) => {
-  const { instruments } = req.query // e.g. "NSE:RELIANCE,BSE:TCS"
-  if (!instruments) return res.status(400).json({ error: 'instruments param required' })
-
-  try {
-    const ids = instruments.split(',').slice(0, 500) // Kite max 500
-    const url = `https://api.kite.trade/quote/ltp?${ids.map(i => `i=${encodeURIComponent(i)}`).join('&')}`
-    // Note: live quotes require auth token — return empty for now, page shows last_price from CSV
-    res.json({ data: {}, note: 'Connect Kite auth for live quotes' })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
-// Refresh instruments cache on demand
 app.post('/api/instruments/refresh', async (req, res) => {
   cacheDate = null
   await loadInstruments()
   res.json({ ok: true, count: instrumentsCache.length })
 })
 
+// ─── Serve built frontend in production ───────────────────────────────────────
+
+if (process.env.NODE_ENV === 'production') {
+  const distPath = join(__dirname, 'dist')
+  const { default: sirv } = await import('sirv')
+  app.use(sirv(distPath, { single: true }))
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
-const PORT = 3001
-app.listen(PORT, async () => {
+const PORT = process.env.PORT || 3001
+app.listen(PORT, () => {
   console.log(`Stock Recco API running on http://localhost:${PORT}`)
-  // Pre-load instruments in background
   loadInstruments().catch(console.error)
 })
