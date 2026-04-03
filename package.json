@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"node server.js\" \"vite\" --names \"api,vite\" --prefix-colors \"cyan,green\"",
+    "server": "node server.js",
+    "vite": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
@@ -22,6 +24,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "concurrently": "^9.2.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
