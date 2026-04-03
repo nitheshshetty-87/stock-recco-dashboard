@@ -1,0 +1,24 @@
+[
+  {
+    "tradingsymbol": "NATIONALUM",
+    "exchange": "NSE",
+    "quantity": 1142,
+    "average_price": 350.7,
+    "last_price": 401.8,
+    "close_price": 399.45,
+    "pnl": 58356.20,
+    "day_change": 2.35,
+    "day_change_percentage": 0.5883
+  },
+  {
+    "tradingsymbol": "ONGC",
+    "exchange": "NSE",
+    "quantity": 735,
+    "average_price": 285.3,
+    "last_price": 287.2,
+    "close_price": 288.05,
+    "pnl": 1396.50,
+    "day_change": -0.85,
+    "day_change_percentage": -0.2951
+  }
+]
