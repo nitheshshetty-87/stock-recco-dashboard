@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install && chmod +x node_modules/.bin/* && npx tsc --noEmit && npx vite build --force"
+    "buildCommand": "npm install && chmod +x node_modules/.bin/* && npm run build"
   },
   "deploy": {
     "startCommand": "npm start",
