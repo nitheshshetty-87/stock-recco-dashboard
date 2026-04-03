@@ -8,7 +8,18 @@
       "mcp__kite__get_profile",
       "Bash(curl -s http://localhost:3001/api/holdings)",
       "Bash(python -m json.tool)",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s \"https://api.kite.trade/instruments/NSE\")",
+      "Bash(curl -s \"https://api.kite.trade/instruments/BSE\")",
+      "Bash(curl -s \"http://localhost:3001/api/instruments?q=reliance&exchange=NSE&limit=3\")",
+      "Bash(netstat -ano)",
+      "Bash(xargs -I {} taskkill /PID {} /F)",
+      "Bash(findstr \":3001\")",
+      "Bash(taskkill /PID 37164 /F)",
+      "Bash(cmd /c \"taskkill /PID 37164 /F\")",
+      "Bash(cmd /c \"taskkill /F /PID 37164\")",
+      "Bash(cmd /c \"taskkill /F /PID 37164 2>&1\")",
+      "Bash(powershell -Command 'Stop-Process -Id 37164 -Force')"
     ]
   }
 }

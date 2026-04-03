@@ -1,58 +1,118 @@
-import { useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
-const sampleStocks = [
-  { symbol: 'RELIANCE', sector: 'Energy', pe: 28.4, pb: 2.1, roe: 14.2, mcap: '19.8L Cr', week52h: 3024, week52l: 2220 },
-  { symbol: 'INFY', sector: 'IT', pe: 22.1, pb: 5.8, roe: 31.5, mcap: '6.3L Cr', week52h: 1600, week52l: 1218 },
-  { symbol: 'HDFCBANK', sector: 'Banking', pe: 18.6, pb: 2.4, roe: 16.8, mcap: '12.1L Cr', week52h: 1794, week52l: 1430 },
-  { symbol: 'TCS', sector: 'IT', pe: 30.2, pb: 12.4, roe: 51.3, mcap: '14.5L Cr', week52h: 4255, week52l: 3311 },
-  { symbol: 'TATAPOWER', sector: 'Power', pe: 41.0, pb: 4.2, roe: 10.1, mcap: '1.2L Cr', week52h: 494, week52l: 320 },
-  { symbol: 'IRCTC', sector: 'Tourism', pe: 55.3, pb: 14.8, roe: 28.7, mcap: '0.57L Cr', week52h: 998, week52l: 666 },
-]
+interface Instrument {
+  token: string
+  symbol: string
+  name: string
+  exchange: string
+  last_price: number
+}
 
-const sectors = ['All', ...Array.from(new Set(sampleStocks.map((s) => s.sector)))]
+interface ApiResponse {
+  total: number
+  page: number
+  limit: number
+  results: Instrument[]
+}
+
+const EXCHANGES = ['ALL', 'NSE', 'BSE']
+const PAGE_SIZE = 50
 
 export default function Screener() {
-  const [search, setSearch] = useState('')
-  const [sector, setSector] = useState('All')
+  const [query, setQuery] = useState('')
+  const [exchange, setExchange] = useState('ALL')
+  const [page, setPage] = useState(0)
+  const [data, setData] = useState<ApiResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const filtered = sampleStocks.filter((s) => {
-    const matchSearch = s.symbol.toLowerCase().includes(search.toLowerCase())
-    const matchSector = sector === 'All' || s.sector === sector
-    return matchSearch && matchSector
-  })
+  const fetchInstruments = useCallback(async (q: string, exch: string, pg: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({ q, exchange: exch, page: String(pg), limit: String(PAGE_SIZE) })
+      const res = await fetch(`/api/instruments?${params}`)
+      if (!res.ok) throw new Error('Failed to fetch instruments')
+      setData(await res.json())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Debounce search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setPage(0)
+      fetchInstruments(query, exchange, 0)
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [query, exchange, fetchInstruments])
+
+  // Page changes (no debounce)
+  useEffect(() => {
+    fetchInstruments(query, exchange, page)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page])
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Screener</h1>
-        <p className="text-gray-400 text-sm mt-1">Filter and research stocks using key metrics.</p>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Screener</h1>
+          <p className="text-gray-400 text-sm mt-1">
+            {data ? (
+              <>Search across <span className="text-white font-medium">{data.total.toLocaleString()}</span> {exchange === 'ALL' ? 'NSE + BSE' : exchange} equities</>
+            ) : 'Loading instruments...'}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <input
-          type="text"
-          placeholder="Search symbol..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-gray-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 w-52"
-        />
-        <div className="flex gap-2 flex-wrap">
-          {sectors.map((s) => (
+        {/* Search */}
+        <div className="relative flex-1 min-w-[220px] max-w-sm">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by name or symbol..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="w-full bg-gray-800/60 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+        </div>
+
+        {/* Exchange filter */}
+        <div className="flex gap-2">
+          {EXCHANGES.map(ex => (
             <button
-              key={s}
-              onClick={() => setSector(s)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
-                sector === s
+              key={ex}
+              onClick={() => { setExchange(ex); setPage(0) }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                exchange === ex
                   ? 'bg-brand-500 text-white'
                   : 'bg-gray-800/60 border border-white/10 text-gray-400 hover:text-white'
               }`}
             >
-              {s}
+              {ex}
             </button>
           ))}
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
+          {error} — make sure `npm run dev` is running (starts the API server)
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-gray-800/60 border border-white/5 rounded-2xl overflow-hidden">
@@ -61,44 +121,79 @@ export default function Screener() {
             <thead>
               <tr className="text-xs text-gray-500 uppercase tracking-wider border-b border-white/5">
                 <th className="px-6 py-3 text-left">Symbol</th>
-                <th className="px-6 py-3 text-left">Sector</th>
-                <th className="px-6 py-3 text-right">P/E</th>
-                <th className="px-6 py-3 text-right">P/B</th>
-                <th className="px-6 py-3 text-right">ROE %</th>
-                <th className="px-6 py-3 text-right">Mkt Cap</th>
-                <th className="px-6 py-3 text-right">52W H</th>
-                <th className="px-6 py-3 text-right">52W L</th>
+                <th className="px-6 py-3 text-left">Company</th>
+                <th className="px-6 py-3 text-center">Exchange</th>
+                <th className="px-6 py-3 text-right">Last Price</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filtered.length === 0 ? (
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-24" /></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-48" /></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-12 mx-auto" /></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-white/5 rounded w-16 ml-auto" /></td>
+                  </tr>
+                ))
+              ) : data?.results.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-gray-500 text-sm">
-                    No stocks match your filters.
+                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                    No stocks found for "{query}"
                   </td>
                 </tr>
               ) : (
-                filtered.map((s) => (
-                  <tr key={s.symbol} className="hover:bg-white/3 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-white">{s.symbol}</td>
-                    <td className="px-6 py-4 text-gray-400">{s.sector}</td>
-                    <td className="px-6 py-4 text-right text-gray-300">{s.pe}</td>
-                    <td className="px-6 py-4 text-right text-gray-300">{s.pb}</td>
-                    <td className="px-6 py-4 text-right text-emerald-400 font-medium">{s.roe}%</td>
-                    <td className="px-6 py-4 text-right text-gray-300">₹{s.mcap}</td>
-                    <td className="px-6 py-4 text-right text-gray-300">₹{s.week52h}</td>
-                    <td className="px-6 py-4 text-right text-gray-300">₹{s.week52l}</td>
+                data?.results.map(inst => (
+                  <tr key={`${inst.exchange}:${inst.symbol}`} className="hover:bg-white/3 transition-colors cursor-pointer">
+                    <td className="px-6 py-3 font-semibold text-white">{inst.symbol}</td>
+                    <td className="px-6 py-3 text-gray-400 max-w-xs truncate">{inst.name}</td>
+                    <td className="px-6 py-3 text-center">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        inst.exchange === 'NSE'
+                          ? 'bg-blue-500/15 text-blue-400'
+                          : 'bg-purple-500/15 text-purple-400'
+                      }`}>
+                        {inst.exchange}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-right text-gray-300">
+                      {inst.last_price > 0 ? `₹${inst.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      <p className="text-center text-xs text-gray-600 mt-6">
-        Sample data shown. Connect a live data source to populate real-time metrics.
-      </p>
+        {/* Pagination */}
+        {data && data.total > PAGE_SIZE && (
+          <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, data.total)} of {data.total.toLocaleString()} stocks
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="px-3 py-1.5 text-xs text-gray-400">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
