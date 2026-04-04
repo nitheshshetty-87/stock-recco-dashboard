@@ -26,7 +26,11 @@
       "Bash(node scripts/add-auth-domain.mjs)",
       "Bash(curl -s \"https://stock-recco-dashboard-production.up.railway.app/assets/index-DBDDadel.js\")",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(curl -s \"http://localhost:3001/api/prices?symbols=RELIANCE:NSE,TCS:NSE,INFY:NSE\")",
+      "Bash(curl -s \"http://localhost:5173/api/prices?symbols=RELIANCE:NSE,TCS:NSE,INFY:NSE\")",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''http://localhost:3001/api/prices?symbols=RELIANCE:NSE,TCS:NSE,INFY:NSE'' -UseBasicParsing | Select-Object -ExpandProperty Content\")",
+      "Bash(powershell -Command \"netstat -ano | findstr '':3001''\")"
     ]
   }
 }
