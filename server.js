@@ -145,22 +145,30 @@ app.get('/api/prices', async (req, res) => {
   try {
     const symbols = (req.query.symbols || '').split(',').filter(Boolean)
     if (!symbols.length) return res.json({})
-    const yfSymbols = symbols.map(s => {
-      const [sym, ex] = s.split(':')
-      return ex === 'BSE' ? `${sym}.BO` : `${sym}.NS`
-    })
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yfSymbols.join(',')}&fields=regularMarketPrice`
-    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
-    if (!r.ok) return res.json({})
-    const json = await r.json()
-    const result = {}
-    for (const q of json?.quoteResponse?.result || []) {
-      const key = q.symbol.endsWith('.BO')
-        ? `${q.symbol.replace('.BO', '')}:BSE`
-        : `${q.symbol.replace('.NS', '')}:NSE`
-      if (q.regularMarketPrice) result[key] = q.regularMarketPrice
+
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
     }
-    res.json(result)
+
+    const entries = await Promise.all(symbols.map(async s => {
+      const [sym, ex] = s.split(':')
+      const yfSym = ex === 'BSE' ? `${sym}.BO` : `${sym}.NS`
+      try {
+        const r = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${yfSym}?interval=1d&range=1d`,
+          { headers }
+        )
+        if (!r.ok) return [s, null]
+        const json = await r.json()
+        const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice
+        return [s, price ?? null]
+      } catch {
+        return [s, null]
+      }
+    }))
+
+    res.json(Object.fromEntries(entries.filter(([, p]) => p != null)))
   } catch {
     res.json({})
   }
