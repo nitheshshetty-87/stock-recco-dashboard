@@ -25,6 +25,7 @@ export default function Screener() {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [prices, setPrices] = useState<Record<string, number>>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchInstruments = useCallback(async (q: string, exch: string, pg: number) => {
@@ -34,7 +35,16 @@ export default function Screener() {
       const params = new URLSearchParams({ q, exchange: exch, page: String(pg), limit: String(PAGE_SIZE) })
       const res = await fetch(`/api/instruments?${params}`)
       if (!res.ok) throw new Error('Failed to fetch instruments')
-      setData(await res.json())
+      const json: ApiResponse = await res.json()
+      setData(json)
+      // Fetch live prices for this page in the background
+      if (json.results.length > 0) {
+        const symbols = json.results.map(i => `${i.symbol}:${i.exchange}`).join(',')
+        fetch(`/api/prices?symbols=${encodeURIComponent(symbols)}`)
+          .then(r => r.json())
+          .then(p => setPrices(prev => ({ ...prev, ...p })))
+          .catch(() => {})
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -157,7 +167,13 @@ export default function Screener() {
                       </span>
                     </td>
                     <td className="px-6 py-3 text-right text-gray-300">
-                      {inst.last_price > 0 ? `₹${inst.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {(() => {
+                        const livePrice = prices[`${inst.symbol}:${inst.exchange}`]
+                        const price = livePrice ?? (inst.last_price > 0 ? inst.last_price : null)
+                        return price != null
+                          ? `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                          : '—'
+                      })()}
                     </td>
                   </tr>
                 ))

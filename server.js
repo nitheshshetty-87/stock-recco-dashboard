@@ -139,6 +139,33 @@ app.post('/api/instruments/refresh', async (req, res) => {
   res.json({ ok: true, count: instrumentsCache.length })
 })
 
+// ─── Live prices via Yahoo Finance ───────────────────────────────────────────
+
+app.get('/api/prices', async (req, res) => {
+  try {
+    const symbols = (req.query.symbols || '').split(',').filter(Boolean)
+    if (!symbols.length) return res.json({})
+    const yfSymbols = symbols.map(s => {
+      const [sym, ex] = s.split(':')
+      return ex === 'BSE' ? `${sym}.BO` : `${sym}.NS`
+    })
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yfSymbols.join(',')}&fields=regularMarketPrice`
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    if (!r.ok) return res.json({})
+    const json = await r.json()
+    const result = {}
+    for (const q of json?.quoteResponse?.result || []) {
+      const key = q.symbol.endsWith('.BO')
+        ? `${q.symbol.replace('.BO', '')}:BSE`
+        : `${q.symbol.replace('.NS', '')}:NSE`
+      if (q.regularMarketPrice) result[key] = q.regularMarketPrice
+    }
+    res.json(result)
+  } catch {
+    res.json({})
+  }
+})
+
 // ─── Serve built frontend in production ───────────────────────────────────────
 
 if (process.env.NODE_ENV === 'production') {
