@@ -26,6 +26,7 @@ export default function Screener() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prices, setPrices] = useState<Record<string, number>>({})
+  const [priceSort, setPriceSort] = useState<'asc' | 'desc' | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchInstruments = useCallback(async (q: string, exch: string, pg: number) => {
@@ -69,6 +70,13 @@ export default function Screener() {
   }, [page])
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
+
+  const sortedResults = data?.results ? [...data.results].sort((a, b) => {
+    if (!priceSort) return 0
+    const pa = prices[`${a.symbol}:${a.exchange}`] ?? a.last_price
+    const pb = prices[`${b.symbol}:${b.exchange}`] ?? b.last_price
+    return priceSort === 'asc' ? pa - pb : pb - pa
+  }) : data?.results
 
   return (
     <div className="p-8">
@@ -133,7 +141,12 @@ export default function Screener() {
                 <th className="px-6 py-3 text-left">Symbol</th>
                 <th className="px-6 py-3 text-left">Company</th>
                 <th className="px-6 py-3 text-center">Exchange</th>
-                <th className="px-6 py-3 text-right">Last Price</th>
+                <th
+                  className="px-6 py-3 text-right cursor-pointer select-none hover:text-gray-300 transition-colors"
+                  onClick={() => setPriceSort(s => s === 'desc' ? 'asc' : s === 'asc' ? null : 'desc')}
+                >
+                  Last Price {priceSort === 'desc' ? '↓' : priceSort === 'asc' ? '↑' : '↕'}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -153,7 +166,7 @@ export default function Screener() {
                   </td>
                 </tr>
               ) : (
-                data?.results.map(inst => (
+                sortedResults?.map(inst => (
                   <tr key={`${inst.exchange}:${inst.symbol}`} className="hover:bg-white/3 transition-colors cursor-pointer">
                     <td className="px-6 py-3 font-semibold text-white">{inst.symbol}</td>
                     <td className="px-6 py-3 text-gray-400 max-w-xs truncate">{inst.name}</td>
